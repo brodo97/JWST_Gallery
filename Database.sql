@@ -1,4 +1,4 @@
-CREATE TABLE "News" (
+CREATE TABLE "Resources" (
 	"ID"	TEXT NOT NULL,
 	"Title"	TEXT,
 	"Description"	TEXT,
