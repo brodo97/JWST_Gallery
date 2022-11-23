@@ -9,4 +9,6 @@ You can subscribe to the unofficial Telegram channel here: https://t.me/JWST_Gal
 
 ## License
 
-Project under GPLv3 License. Read more [here](/LICENSE) or [here](https://www.gnu.org/licenses/gpl-3.0)
+[![License: GPL v3](https://www.gnu.org/graphics/gplv3-127x51.png)](https://www.gnu.org/licenses/gpl-3.0)
+
+Project licensed under [GNU GPL 3.0](https://www.gnu.org/licenses/gpl-3.0). Read more [here](/LICENSE) or [here](https://www.gnu.org/licenses/gpl-3.0)
