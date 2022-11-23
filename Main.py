@@ -3,7 +3,9 @@ from bs4 import BeautifulSoup as Soup
 from Config import *
 import sqlite3
 
-known_news = []
+URL = "https://webbtelescope.org"
+RESOURCES_URL = f"{URL}/resource-gallery/"
+known_resources = []
 
 CONN = sqlite3.connect("Database.db", check_same_thread=False)
 

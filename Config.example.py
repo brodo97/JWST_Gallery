@@ -7,10 +7,3 @@ TELEGRAM_CHANNEL_NAME = ""
 TELEGRAM_CHANNEL_ID = -0
 # Bot token, the bot that send news to the channel
 TELEGRAM_BOT_TOKEN = ""
-
-
-# WEBSITE CONFIGURATION
-# Website URL
-URL = ""
-# Website news URL
-NEWS_URL = ""
