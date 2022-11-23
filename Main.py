@@ -219,6 +219,25 @@ def main():
     return
 
 
+def lambda_handler(event, lambda_context):
+    """
+    AWS Lambda Handler
+
+    I run this bot as an AWS Lambda Function.
+
+    I use this function to handle the 2 positional arguments (event, lambda_context) that Lambda pass to the script.
+    I don't really know how to use them... Actually I think I don't even need them.
+
+    :param event: Lambda Argument
+    :param lambda_context: Lambda Argument
+    :return: None
+    """
+
+    main()
+
+    return
+
+
 if __name__ == "__main__":
     main()
 
