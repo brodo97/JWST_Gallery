@@ -5,6 +5,7 @@ import sqlite3
 
 URL = "https://webbtelescope.org"
 RESOURCES_URL = f"{URL}/resource-gallery/"
+AWS_REQUEST_ID = None
 known_resources = []
 
 CONN = sqlite3.connect("Database.db", check_same_thread=False)
@@ -35,7 +36,11 @@ def send_error_to_admin(error: str):
 
     # Construct error's text
     text = f"*{TELEGRAM_CHANNEL_NAME}*\n"
-    text += "An error occurred:\n"
+    
+    if AWS_REQUEST_ID is not None:
+        text += "AWS Request ID: `{AWS_REQUEST_ID}`\n"
+    
+    text += "An error occurred:\n"    
     text += f"`{error}`"
 
     # Send notification
@@ -309,6 +314,10 @@ def lambda_handler(event, lambda_context):
     :return: None
     """
 
+    # Set AWS_REQUEST_ID for debugging purposes
+    global AWS_REQUEST_ID    
+    AWS_REQUEST_ID = lambda_context.aws_request_id
+    
     main()
 
     return
