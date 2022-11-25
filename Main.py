@@ -38,7 +38,7 @@ def send_error_to_admin(error: str):
     text = f"*{TELEGRAM_CHANNEL_NAME}*\n"
     
     if AWS_REQUEST_ID is not None:
-        text += "AWS Request ID: `{AWS_REQUEST_ID}`\n"
+        text += f"AWS Request ID: `{AWS_REQUEST_ID}`\n"
     
     text += "An error occurred:\n"    
     text += f"`{error}`"
