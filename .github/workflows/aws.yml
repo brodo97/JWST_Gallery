@@ -9,6 +9,7 @@ jobs:
   deploy_lambda:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - name: Build
         run: |
           mv Config.example.py Config.py
