@@ -1,7 +1,7 @@
-# TELEGRAM CONFIGURATION
-# Admin ID, for errors alert
 import os
 
+# TELEGRAM CONFIGURATION
+# Admin ID, for errors alert
 TELEGRAM_ADMIN_ID = os.environ["TELEGRAM_ADMIN_ID"]
 # Channel Name, for error alert (formatting)
 TELEGRAM_CHANNEL_NAME = os.environ["TELEGRAM_CHANNEL_NAME"]

@@ -14,9 +14,15 @@ jobs:
         run: |
           mv Config.example.py Config.py
           echo "${{ secrets.MONGODB_CERTIFICATE }}" > ${{ secrets.MONGODB_CERTIFICATE_NAME }}
-          zip -r upload.zip . -x "*.git*"
 
-      - uses: actions/upload-artifact@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          name: Artifact
-          path: ${{ github.workspace }}/upload.zip
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy
+        run: |
+          zip -r deploy.zip . -x "*.git*"
+          aws lambda update-function-code --function-name=${{ secrets.LAMBDA_FUNCTION_NAME }} -zip-file=fileb://deploy.zip
