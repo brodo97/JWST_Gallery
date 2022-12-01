@@ -10,8 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: test
+      - name: Build
         run: |
-          ls
-          pwd
-          
+          mv Config.example.py Config.py
+          echo ${{ secrets.MONGODB_CERTIFICATE }} > ${{ secrets.MONGODB_CERTIFICATE_NAME }}
+      - name: Testing
+        run: |
+          ls -la
