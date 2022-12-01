@@ -14,12 +14,12 @@ jobs:
         run: |
           touch Config.py
 
-          echo "MONGODB_CERTIFICATE = \"${{ secrets.MONGODB_CERTIFICATE }}\"" >> Config.py
+          echo "MONGODB_CERTIFICATE = \"${{ secrets.MONGODB_CERTIFICATE_NAME }}\"" >> Config.py
           echo "MONGODB_COLLECTION = \"${{ secrets.MONGODB_COLLECTION }}\"" >> Config.py
           echo "MONGODB_DATABASE = \"${{ secrets.MONGODB_DATABASE }}\"" >> Config.py
           echo "MONGODB_URI = \"${{ secrets.MONGODB_URI }}\"" >> Config.py
           echo "TELEGRAM_ADMIN_ID = ${{ secrets.TELEGRAM_ADMIN_ID }}" >> Config.py
-          echo "TELEGRAM_BOT_TOKEN = ${{ secrets.TELEGRAM_BOT_TOKEN }}" >> Config.py
+          echo "TELEGRAM_BOT_TOKEN = \"${{ secrets.TELEGRAM_BOT_TOKEN }}\"" >> Config.py
           echo "TELEGRAM_CHANNEL_ID = ${{ secrets.TELEGRAM_CHANNEL_ID }}" >> Config.py
           echo "TELEGRAM_CHANNEL_NAME = \"${{ secrets.TELEGRAM_CHANNEL_NAME }}\"" >> Config.py
 
