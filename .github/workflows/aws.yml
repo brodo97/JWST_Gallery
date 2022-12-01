@@ -1,0 +1,17 @@
+name: Deploy to AWS Lambda
+
+on:
+  push:
+    branches:
+    - main
+
+jobs:
+  deploy_lambda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: test
+        run: |
+          ls
+          pwd
+          
