@@ -14,9 +14,9 @@ jobs:
         run: |
           mv Config.example.py Config.py
           echo "${{ secrets.MONGODB_CERTIFICATE }}" > ${{ secrets.MONGODB_CERTIFICATE_NAME }}
-          zip -r upload.zip . -x .git
+          zip -r upload.zip . -x "*.git*"
 
       - uses: actions/download-artifact@v3
         with:
           name: Artifact
-          path: upload.zip
+          path: ${{ github.GITHUB_WORKSPACE }}/upload.zip
