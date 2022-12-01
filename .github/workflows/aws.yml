@@ -25,4 +25,4 @@ jobs:
       - name: Deploy
         run: |
           zip -r deploy.zip . -x "*.git*"
-          aws lambda update-function-code --function-name=${{ secrets.LAMBDA_FUNCTION_NAME }} -zip-file=fileb://deploy.zip
+          aws lambda update-function-code --function-name=${{ secrets.LAMBDA_FUNCTION_NAME }} --zip-file=fileb://deploy.zip
