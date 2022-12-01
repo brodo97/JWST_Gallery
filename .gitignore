@@ -138,3 +138,4 @@ Database.db
 # Test files
 Test.py
 Output.html
+*.pem
