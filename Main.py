@@ -261,9 +261,6 @@ def get_resources():
             if result is False:
                 send_error_to_admin(data)
 
-                # Close DB connection
-                CONN.close()
-
                 exit()
 
     # Return ok
@@ -286,16 +283,10 @@ def main():
     if result is False:
         send_error_to_admin(data)
 
-        # Close DB connection
-        CONN.close()
-
         exit()
 
     # Send new news
     send_news()
-
-    # Close DB connection when everything is done
-    CONN.close()
 
     return
 
