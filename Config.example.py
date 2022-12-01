@@ -1,21 +1,19 @@
-import os
-
 # TELEGRAM CONFIGURATION
 # Admin ID, for errors alert
-TELEGRAM_ADMIN_ID = os.environ["TELEGRAM_ADMIN_ID"]
+TELEGRAM_ADMIN_ID = 0
 # Channel Name, for error alert (formatting)
-TELEGRAM_CHANNEL_NAME = os.environ["TELEGRAM_CHANNEL_NAME"]
+TELEGRAM_CHANNEL_NAME = ""
 # Channel ID, to send news
-TELEGRAM_CHANNEL_ID = os.environ["TELEGRAM_CHANNEL_ID"]
+TELEGRAM_CHANNEL_ID = 0
 # Bot token, the bot that send news to the channel
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_BOT_TOKEN = ""
 
 # MONGODB CONFIGURATION
 # MongoDB Connection URI
-MONGODB_URI = os.environ["MONGODB_URI"]
+MONGODB_URI = ""
 # MongoDB Authentication Certificate
-MONGODB_CERTIFICATE = os.environ["MONGODB_CERTIFICATE"]
+MONGODB_CERTIFICATE = ""
 # Database Name
-MONGODB_DATABASE = os.environ["MONGODB_DATABASE"]
+MONGODB_DATABASE = ""
 # Database's Collection Name
-MONGODB_COLLECTION = os.environ["MONGODB_COLLECTION"]
+MONGODB_COLLECTION = ""
