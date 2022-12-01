@@ -1,0 +1,38 @@
+name: Deploy to AWS Lambda
+
+on:
+  push:
+    branches:
+    - mongodb
+
+jobs:
+  deploy_lambda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: |
+          touch Config.py
+
+          echo "MONGODB_CERTIFICATE = \"${{ secrets.MONGODB_CERTIFICATE_NAME }}\"" >> Config.py
+          echo "MONGODB_COLLECTION = \"${{ secrets.MONGODB_COLLECTION }}\"" >> Config.py
+          echo "MONGODB_DATABASE = \"${{ secrets.MONGODB_DATABASE }}\"" >> Config.py
+          echo "MONGODB_URI = \"${{ secrets.MONGODB_URI }}\"" >> Config.py
+          echo "TELEGRAM_ADMIN_ID = ${{ secrets.TELEGRAM_ADMIN_ID }}" >> Config.py
+          echo "TELEGRAM_BOT_TOKEN = \"${{ secrets.TELEGRAM_BOT_TOKEN }}\"" >> Config.py
+          echo "TELEGRAM_CHANNEL_ID = ${{ secrets.TELEGRAM_CHANNEL_ID }}" >> Config.py
+          echo "TELEGRAM_CHANNEL_NAME = \"${{ secrets.TELEGRAM_CHANNEL_NAME }}\"" >> Config.py
+
+          echo "${{ secrets.MONGODB_CERTIFICATE }}" > ${{ secrets.MONGODB_CERTIFICATE_NAME }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy
+        run: |
+          zip -r deploy.zip . -x "*.git*"
+          aws lambda update-function-code --function-name=${{ secrets.LAMBDA_FUNCTION_NAME }} --zip-file=fileb://deploy.zip

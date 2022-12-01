@@ -1,14 +1,20 @@
 import requests
 from bs4 import BeautifulSoup as Soup
+from Model import MongoDB
 from Config import *
-import sqlite3
 
 URL = "https://webbtelescope.org"
 RESOURCES_URL = f"{URL}/resource-gallery/"
 AWS_REQUEST_ID = None
 known_resources = []
 
-CONN = sqlite3.connect("Database.db", check_same_thread=False)
+# Init MongoDB
+CONN = MongoDB(
+    uri=MONGODB_URI,
+    certificate=MONGODB_CERTIFICATE,
+    database=MONGODB_DATABASE,
+    collection=MONGODB_COLLECTION
+)
 
 
 def get_known_resources():
@@ -20,8 +26,9 @@ def get_known_resources():
     global known_resources
 
     # Query known IDs
-    for row in CONN.execute("SELECT ID FROM Resources;"):
-        known_resources.append(row[0])
+    for document in CONN.get_all_resources():
+        _, identifier = document
+        known_resources.append(identifier)
 
     return
 
@@ -60,10 +67,8 @@ def send_news():
     """
 
     # Query unsent messages
-    for row in CONN.execute(
-        "SELECT ID, Title, Description, ImageURL, Link FROM Resources WHERE Sent = 0;"
-    ):
-        news_id, title, description, image_url, link = row
+    for document in CONN.get_unsent_resources():
+        _id, news_id, title, description, image_url, link = document
 
         # Construct the news caption
         text = f"*{title}*\n\n"
@@ -94,14 +99,11 @@ def send_news():
             send_error_to_admin(f"Resources({news_id})" + response["description"])
             break
 
-        # Else, update the sell value of the news to the corresponding message ID (on Telegram)
-        CONN.execute(
-            "UPDATE Resources SET Sent = ? WHERE ID = ?;",
-            [response["result"]["message_id"], news_id]
+        # Else, update the document on MongoDB
+        CONN.update_to_sent(
+            _id=_id,
+            message_id=response["result"]["message_id"]
         )
-
-        # Commit changes
-        CONN.commit()
 
     return
 
@@ -152,17 +154,16 @@ def parse_resources(data: str):
             # Else, remember it!
             known_resources.append(news_id)
 
-            # Update news DB
-            CONN.execute(
-                "INSERT INTO Resources (ID, Title, Description, ImageURL, Link) VALUES (?, ?, ?, ?, ?);",
-                [news_id, title, description, img, link]
+            # Insert the news in the DB
+            CONN.insert_new_resource(
+                identifier=news_id,
+                title=title,
+                description=description,
+                imageurl=img,
+                link=link
             )
 
-        # Commit changes
-        CONN.commit()
-
-    except Exception as e:  # If an exception occur, rollback and return the error
-        CONN.rollback()
+    except Exception as e:  # If an exception occur, return the error
         return False, f"parse_data() something went wrong: {e}"
 
     return True, ""
@@ -214,17 +215,16 @@ def parse_articles(data: str):
             # Else, remember it!
             known_resources.append(article_id)
 
-            # Update news DB
-            CONN.execute(
-                "INSERT INTO Resources (ID, Title, Description, ImageURL, Link) VALUES (?, ?, ?, ?, ?);",
-                [article_id, title, description, img, link]
+            # Insert the news in the DB
+            CONN.insert_new_resource(
+                identifier=article_id,
+                title=title,
+                description=description,
+                imageurl=img,
+                link=link
             )
 
-        # Commit changes
-        CONN.commit()
-
-    except Exception as e:  # If an exception occur, rollback and return the error
-        CONN.rollback()
+    except Exception as e:  # If an exception occur, return the error
         return False, f"parse_data() something went wrong: {e}"
 
     return True, ""
@@ -261,9 +261,6 @@ def get_resources():
             if result is False:
                 send_error_to_admin(data)
 
-                # Close DB
-                CONN.close()
-
                 exit()
 
     # Return ok
@@ -286,16 +283,10 @@ def main():
     if result is False:
         send_error_to_admin(data)
 
-        # Close DB
-        CONN.close()
-
         exit()
 
     # Send new news
     send_news()
-
-    # Close DB when everything is done
-    CONN.close()
 
     return
 
