@@ -13,7 +13,7 @@ jobs:
       - name: Build
         run: |
           mv Config.example.py Config.py
-          echo ${{ secrets.MONGODB_CERTIFICATE }} > ${{ secrets.MONGODB_CERTIFICATE_NAME }}
+          echo "${{ secrets.MONGODB_CERTIFICATE }}" > ${{ secrets.MONGODB_CERTIFICATE_NAME }}
       - name: Testing
         run: |
           ls -la
