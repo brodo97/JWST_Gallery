@@ -191,7 +191,7 @@ def parse_articles(data: str):
             title = div.find("h3").text
 
             # Get article's description
-            description = div.find("div", {"class": "article-description"}).text.strip()
+            description = div.find("p", {"class": "article-description"}).text.strip()
 
             # Get article's image srcset
             img = div.find("img").get("srcset")
@@ -259,7 +259,7 @@ def get_resources():
 
             # An error occurred while parsing data?
             if result is False:
-                send_error_to_admin(data)
+                send_error_to_admin(data + f" on {response.url}")
 
                 exit()
 
