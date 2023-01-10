@@ -88,7 +88,11 @@ def send_news():
         # Send notification
         response = requests.post(
             url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",
-            data={"chat_id": TELEGRAM_CHANNEL_ID, "caption": text, "parse_mode": "markdown", "photo": image_url}
+            data={
+                "chat_id": TELEGRAM_CHANNEL_ID,
+                "caption": text,
+                "parse_mode": "markdown",
+                "photo": image_url}
         )
 
         # Convert response into a json object
@@ -139,6 +143,10 @@ def parse_resources(data: str):
             img = img.split(", ")[0]
             img = img.split(" ")[0]
             img = img.replace("//", "https://")
+
+            # If the image host is missing, presume {URL}, the source of the resources
+            if "http" not in img:
+                img = f"{URL}/{img}"
 
             # Get news' link
             link = div.find("a").get("href")
@@ -200,6 +208,10 @@ def parse_articles(data: str):
             img = img.split(", ")[0]
             img = img.split(" ")[0]
             img = img.replace("//", "https://")
+
+            # If the image host is missing, presume {URL}, the source of the articles
+            if "http" not in img:
+                img = f"{URL}/{img}"
 
             # Get article's link
             link = div.find("a").get("href")
