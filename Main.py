@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup as Soup
 from Model import MongoDB
 from Config import *
+import traceback
 
 URL = "https://webbtelescope.org"
 RESOURCES_URL = f"{URL}/resource-gallery/"
@@ -320,8 +321,11 @@ def lambda_handler(event, lambda_context):
     # Set AWS_REQUEST_ID for debugging purposes
     global AWS_REQUEST_ID    
     AWS_REQUEST_ID = lambda_context.aws_request_id
-    
-    main()
+
+    try:
+        main()
+    except:
+        traceback.print_exc()
 
     return
 
