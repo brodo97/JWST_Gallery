@@ -253,6 +253,11 @@ def get_resources():
 
     # Open a session to make the requests all together
     with requests.Session() as session:
+        # Update session's user-agent header to make it look more "human"
+        session.headers.update({
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+        })        
+        
         # For every different resource type
         for path in ["images", "videos", "articles", "other-resources"]:
             # Make a get request to the URL
