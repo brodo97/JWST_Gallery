@@ -173,7 +173,7 @@ def parse_resources(data: str):
             )
 
     except Exception as e:  # If an exception occur, return the error
-        return False, f"parse_data() something went wrong: {e}"
+        return False, f"parse_resources() something went wrong: {e}"
 
     return True, ""
 
@@ -238,7 +238,7 @@ def parse_articles(data: str):
             )
 
     except Exception as e:  # If an exception occur, return the error
-        return False, f"parse_data() something went wrong: {e}"
+        return False, f"parse_articles() something went wrong: {e}"
 
     return True, ""
 
@@ -260,7 +260,7 @@ def get_resources():
 
             # If the response status code differ from 200, then something occurred. Return an error
             if response.status_code != 200:
-                return False, f"get_data() returned status code = {response.status_code} on path: {path!r}"
+                return False, f"get_resources() returned status code = {response.status_code} on path: {path!r}"
 
             # Parse JWST data
             # If path = "articles", parse the data using a different function, the webpage structure differ, so a
