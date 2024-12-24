@@ -71,6 +71,8 @@ def send_news():
     for document in CONN.get_unsent_resources():
         _id, news_id, title, description, image_url, link = document
 
+        title = title.strip()
+
         # Construct the news caption
         text = f"*{title}*\n\n"
         text += f"{description}\n\n"
