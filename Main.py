@@ -197,7 +197,7 @@ def parse_articles(data: str):
         # reversed is used to sort div from less to more recent
         for div in reversed(page.find_all("div", {"class": "news-listing"})):
             # Get article's title
-            title = div.find("h3").text
+            title = div.find("h4").text.strip()
 
             # Get article's description
             description = div.find("p", {"class": "article-description"}).text.strip()
