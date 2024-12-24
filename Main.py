@@ -134,7 +134,7 @@ def parse_resources(data: str):
         # reversed is used to sort div from less to more recent
         for div in reversed(page.find_all("div", {"class": "ad-research-box"})):
             # Get news' title
-            title = div.find("p").text
+            title = div.find("p").text.strip()
 
             # Get news' description
             description = div.find("img").get("alt")
