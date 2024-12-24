@@ -103,7 +103,7 @@ def send_news():
 
         # If response "ok" status is False, send error to admin
         if response["ok"] is False:
-            send_error_to_admin(f"Resources({news_id})" + response["description"])
+            send_error_to_admin(f"Resources({news_id!r}) - {_id!r}\n" + response["description"])
             break
 
         # Else, update the document on MongoDB
