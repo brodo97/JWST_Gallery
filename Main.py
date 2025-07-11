@@ -59,40 +59,75 @@ def send_error_to_admin(error: str, traceback_data: str = ""):
 
 
 def init_logger() -> None:
-    """Funzione che inizializza il logger
     """
+    Inizializza il logger dell'applicazione con configurazioni diverse per ambiente locale e AWS Lambda
+    
+    - Ambiente locale: include timestamp e console handler
+    - AWS Lambda: formato semplificato con propagazione al sistema Lambda
+    """
+    global LOGGER, AWS_REQUEST_ID
 
-    global LOGGER
-
+    # 1. Configurazione base del logger
     LOGGER = logging.getLogger(APP_NAME)
     LOGGER.setLevel(LOG_LEVEL)
-    formatter = logging.Formatter("%(asctime)s - {%(filename)s:%(lineno)d} - %(levelname)s - %(message)s", "%Y-%m-%d %H:%M:%S")
+    
+    # 2. Configurazione handler di eccezioni globali
+    setup_exception_handler()
+    
+    # 3. Configurazione specifica per ambiente
+    if AWS_REQUEST_ID is None:
+        configure_local_logging()
+    else:
+        configure_lambda_logging()
+    
+    # 4. Assegna logger al modulo Model
+    Model.LOGGER = LOGGER
+    
+    return
 
+
+def setup_exception_handler() -> None:
+    """Configura il gestore delle eccezioni non catturate"""
     def handle_exception(exc_type, exc_value, exc_traceback):
+        # Ignora KeyboardInterrupt per permettere chiusura pulita
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
 
+        # Log eccezione e invia notifica admin
         tb_str = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
         LOGGER.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
         send_error_to_admin(error=f"Uncaught exception: {exc_value}", traceback_data=tb_str)
-
         sys.exit(1)
 
-        # Assign the exception hook outside the function to ensure it's set globally
     sys.excepthook = handle_exception
 
-    # Aggiungo un handler per il log su console
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setLevel(LOG_LEVEL)
-    consoleHandler.setFormatter(formatter)
-    LOGGER.addHandler(consoleHandler)
 
-    Model.LOGGER = LOGGER
+def configure_local_logging() -> None:
+    """Configura il logging per esecuzione locale"""
+    # Formato con timestamp per esecuzione locale
+    log_format = "%(asctime)s - {%(filename)s:%(lineno)d} - %(levelname)s - %(message)s"
+    formatter = logging.Formatter(log_format, "%Y-%m-%d %H:%M:%S")
+    
+    # Aggiungi console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(LOG_LEVEL)
+    console_handler.setFormatter(formatter)
+    LOGGER.addHandler(console_handler)
+    
+    LOGGER.info(f"{APP_NAME} started with log level: {LOG_LEVEL} (Local execution)")
 
-    LOGGER.info(f"{APP_NAME} started with log level: {LOG_LEVEL}")
 
-    return
+def configure_lambda_logging() -> None:
+    """Configura il logging per AWS Lambda"""
+    # Rimuovi tutti gli handler esistenti per evitare duplicazione
+    for handler in LOGGER.handlers[:]:
+        LOGGER.removeHandler(handler)
+    
+    # AWS Lambda gestisce automaticamente timestamp e request ID
+    LOGGER.propagate = True
+    
+    LOGGER.info(f"{APP_NAME} started with log level: {LOG_LEVEL} (AWS Lambda execution)")
 
 
 def get_known_resources():
@@ -113,8 +148,6 @@ def get_known_resources():
             known_resources.append(identifier)
             count += 1
 
-        LOGGER.info(f"Successfully loaded {count} known resources")
-        
     except Exception as e:
         LOGGER.error(f"Error loading known resources: {str(e)}")
         raise
@@ -603,7 +636,6 @@ def main():
     LOGGER.info("=== JWST Gallery Bot Main Process Started ===")
     
     try:
-        LOGGER.info("Initializing MongoDB connection...")
         CONN = Model.MongoDB(
             uri=MONGODB_URI,
             certificate=MONGODB_CERTIFICATE,
@@ -611,7 +643,6 @@ def main():
             collection=MONGODB_COLLECTION
         )
 
-        LOGGER.info("Loading known resources from database...")
         # Init {known_resources} array
         get_known_resources()
 
