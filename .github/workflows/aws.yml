@@ -23,6 +23,8 @@ jobs:
           echo "TELEGRAM_BOT_TOKEN = \"${{ secrets.TELEGRAM_BOT_TOKEN }}\"" >> Config.py
           echo "TELEGRAM_CHANNEL_ID = ${{ secrets.TELEGRAM_CHANNEL_ID }}" >> Config.py
           echo "TELEGRAM_CHANNEL_NAME = \"${{ secrets.TELEGRAM_CHANNEL_NAME }}\"" >> Config.py
+          echo "APP_NAME = \"JWST Galley\"" >> Config.py
+          echo "LOG_LEVEL = \"DEBUG\"" >> Config.py
 
           echo "${{ secrets.MONGODB_CERTIFICATE }}" > ${{ secrets.MONGODB_CERTIFICATE_NAME }}
 
