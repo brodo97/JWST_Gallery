@@ -1,21 +1,98 @@
 import requests
 from bs4 import BeautifulSoup as Soup
-from Model import MongoDB
+import Model
 from Config import *
 import traceback
+import logging
+import sys
+import time
 
+LOGGER : logging.Logger = None
 URL = "https://webbtelescope.org"
 RESOURCES_URL = f"{URL}/resource-gallery/"
 AWS_REQUEST_ID = None
 known_resources = []
 
+
 # Init MongoDB
-CONN = MongoDB(
-    uri=MONGODB_URI,
-    certificate=MONGODB_CERTIFICATE,
-    database=MONGODB_DATABASE,
-    collection=MONGODB_COLLECTION
-)
+CONN : Model.MongoDB = None
+
+def send_error_to_admin(error: str, traceback_data: str = ""):
+    """
+    Send error notification to {TELEGRAM_ADMIN_ID}
+
+    :param error: Error data
+    :param traceback_data: Full traceback data (optional)
+    :return: None
+    """
+
+    LOGGER.info(f"Sending error notification to admin: {TELEGRAM_ADMIN_ID}")
+    LOGGER.debug(f"Error details: {error}")
+    
+    try:
+        # Construct error's text
+        text = f"*{TELEGRAM_CHANNEL_NAME}*\n"
+
+        if AWS_REQUEST_ID is not None:
+            text += f"AWS Request ID: `{AWS_REQUEST_ID}`\n"
+
+        text += "An error occurred:\n"
+        text += f"`{error}`\n"
+        if traceback_data:
+            text += f"Traceback:\n```\n{traceback_data}\n```"
+
+        # Send notification
+        response = requests.post(
+            url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            data={"chat_id": TELEGRAM_ADMIN_ID, "text": text, "parse_mode": "markdown"}
+        )
+        
+        if response.status_code == 200:
+            LOGGER.info("Error notification sent successfully to admin")
+        else:
+            LOGGER.warning(f"Failed to send error notification to admin. Status code: {response.status_code}")
+            
+    except Exception as e:
+        LOGGER.error(f"Failed to send error notification to admin: {str(e)}")
+
+    return
+
+
+def init_logger() -> None:
+    """Funzione che inizializza il logger
+    """
+
+    global LOGGER
+
+    LOGGER = logging.getLogger(APP_NAME)
+    LOGGER.setLevel(LOG_LEVEL)
+    formatter = logging.Formatter("%(asctime)s - {%(filename)s:%(lineno)d} - %(levelname)s - %(message)s", "%Y-%m-%d %H:%M:%S")
+
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+
+        tb_str = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        LOGGER.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+        send_error_to_admin(error=f"Uncaught exception: {exc_value}", traceback_data=tb_str)
+
+        sys.exit(1)
+
+        # Assign the exception hook outside the function to ensure it's set globally
+    sys.excepthook = handle_exception
+
+    # Aggiungo un handler per il log su console
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setLevel(LOG_LEVEL)
+    consoleHandler.setFormatter(formatter)
+    LOGGER.addHandler(consoleHandler)
+
+    Model.LOGGER = LOGGER
+
+    LOGGER.info(f"{APP_NAME} started with log level: {LOG_LEVEL}")
+
+    return
 
 
 def get_known_resources():
@@ -26,38 +103,65 @@ def get_known_resources():
 
     global known_resources
 
-    # Query known IDs
-    for document in CONN.get_all_resources():
-        _, identifier = document
-        known_resources.append(identifier)
+    LOGGER.info("Loading known resources from database")
+    
+    try:
+        # Query known IDs
+        count = 0
+        for document in CONN.get_all_resources():
+            _, identifier = document
+            known_resources.append(identifier)
+            count += 1
+
+        LOGGER.info(f"Successfully loaded {count} known resources")
+        
+    except Exception as e:
+        LOGGER.error(f"Error loading known resources: {str(e)}")
+        raise
 
     return
 
 
-def send_error_to_admin(error: str):
+def sanitize_telegram_text(text: str) -> str:
     """
-    Send error notification to {TELEGRAM_ADMIN_ID}
-
-    :param error: Error data
-    :return: None
+    Sanitize text for Telegram Markdown to prevent parsing errors
+    
+    :param text: Text to sanitize
+    :return: Sanitized text safe for Telegram Markdown
     """
-
-    # Construct error's text
-    text = f"*{TELEGRAM_CHANNEL_NAME}*\n"
+    if not text:
+        return ""
     
-    if AWS_REQUEST_ID is not None:
-        text += f"AWS Request ID: `{AWS_REQUEST_ID}`\n"
+    # Characters that need to be escaped in Telegram MarkdownV2
+    markdown_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
     
-    text += "An error occurred:\n"    
-    text += f"`{error}`"
+    # Escape special markdown characters
+    for char in markdown_chars:
+        text = text.replace(char, f'\\{char}')
+    
+    return text
 
-    # Send notification
-    requests.post(
-        url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        data={"chat_id": TELEGRAM_ADMIN_ID, "text": text, "parse_mode": "markdown"}
-    )
 
-    return
+def create_telegram_caption(title: str, description: str, link: str) -> str:
+    """
+    Create a properly formatted Telegram caption with escaped Markdown
+    
+    :param title: News title
+    :param description: News description  
+    :param link: News link
+    :return: Formatted and safe caption for Telegram
+    """
+    # Sanitize all text components
+    safe_title = sanitize_telegram_text(title.strip())
+    safe_description = sanitize_telegram_text(description.strip())
+    safe_link = sanitize_telegram_text(link)
+    
+    # Create caption with escaped text
+    caption = f"*{safe_title}*\n\n"
+    caption += f"{safe_description}\n\n"
+    caption += f"Link to the full article: [Link]({URL}{safe_link})"
+    
+    return caption
 
 
 def send_news():
@@ -67,50 +171,122 @@ def send_news():
     :return: None
     """
 
-    # Query unsent messages
-    for document in CONN.get_unsent_resources():
-        _id, news_id, title, description, image_url, link = document
+    LOGGER.info("Starting to send unsent news to Telegram")
+    
+    try:
+        # Query unsent messages
+        news_count = 0
+        for document in CONN.get_unsent_resources():
+            time.sleep(0.1)  # Sleep to avoid hitting Telegram API limits too quickly
+            _id, news_id, title, description, image_url, link = document
+            news_count += 1
+            
+            LOGGER.info(f"Processing news {news_count}: {news_id} - {title[:50]}...")
 
-        title = title.strip()
+            # Create safe Telegram caption
+            caption = create_telegram_caption(title, description, link)
 
-        # Construct the news caption
-        text = f"*{title}*\n\n"
-        text += f"{description}\n\n"
-        text += f"Link to the full article: [Link]({URL}{link})"
+            # If the caption surpass the 1024 char limit, cut the description
+            original_length = len(caption)
+            if len(caption) > 1024:
+                # Calculate how much to remove from description
+                excess_chars = len(caption) - 1024 + 3  # +3 for "..."
+                
+                # Trim description and recreate caption
+                trimmed_description = description[:-excess_chars] + "..."
+                caption = create_telegram_caption(title, trimmed_description, link)
+                
+                LOGGER.debug(f"Caption too long ({original_length} chars), truncated description for news {news_id}")
 
-        # If the caption surpass the 1024 char limit, cut the description
-        if len(text) > 1024:
-            remove_from_description = len(text) - 1024 + 3
-            description = description[:-remove_from_description] + "..."
+            LOGGER.debug(f"Sending Telegram message for news {news_id} to channel {TELEGRAM_CHANNEL_ID}")
+            LOGGER.debug(f"Caption length: {len(caption)} chars")
+            
+            # Send notification
+            response = requests.post(
+                url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",
+                data={
+                    "chat_id": TELEGRAM_CHANNEL_ID,
+                    "caption": caption,
+                    "parse_mode": "MarkdownV2",
+                    "photo": image_url}
+            )
 
-            # Reconstruct the news caption
-            text = f"*{title}*\n\n"
-            text += f"{description}\n\n"
-            text += f"Link to the full article: [Link]({URL}{link})"
+            # Convert response into a json object
+            response = response.json()
 
-        # Send notification
-        response = requests.post(
-            url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",
-            data={
-                "chat_id": TELEGRAM_CHANNEL_ID,
-                "caption": text,
-                "parse_mode": "markdown",
-                "photo": image_url}
-        )
+            # If response "ok" status is False, try with HTML parsing or plain text
+            if response["ok"] is False:
+                LOGGER.warning(f"MarkdownV2 failed for news {news_id}: {response.get('description', 'Unknown error')}")
+                
+                # Try with HTML parsing as fallback
+                html_caption = f"<b>{title.strip()}</b>\n\n{description.strip()}\n\n<a href='{URL}{link}'>Link to the full article</a>"
+                
+                # Check HTML caption length and truncate if needed
+                if len(html_caption) > 1024:
+                    excess_chars = len(html_caption) - 1024 + 3
+                    trimmed_desc = description.strip()[:-excess_chars] + "..."
+                    html_caption = f"<b>{title.strip()}</b>\n\n{trimmed_desc}\n\n<a href='{URL}{link}'>Link to the full article</a>"
+                    LOGGER.debug(f"HTML caption also truncated for news {news_id}")
+                
+                LOGGER.info(f"Retrying with HTML format for news {news_id}")
+                response = requests.post(
+                    url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",
+                    data={
+                        "chat_id": TELEGRAM_CHANNEL_ID,
+                        "caption": html_caption,
+                        "parse_mode": "HTML",
+                        "photo": image_url}
+                )
+                
+                response = response.json()
+                
+                # If HTML also fails, try without any formatting
+                if response["ok"] is False:
+                    LOGGER.warning(f"HTML also failed for news {news_id}: {response.get('description', 'Unknown error')}")
+                    
+                    plain_caption = f"{title.strip()}\n\n{description.strip()}\n\nLink: {URL}{link}"
+                    
+                    # Check plain caption length and truncate if needed
+                    if len(plain_caption) > 1024:
+                        excess_chars = len(plain_caption) - 1024 + 3
+                        trimmed_desc = description.strip()[:-excess_chars] + "..."
+                        plain_caption = f"{title.strip()}\n\n{trimmed_desc}\n\nLink: {URL}{link}"
+                        LOGGER.debug(f"Plain text caption also truncated for news {news_id}")
+                    
+                    LOGGER.info(f"Retrying with plain text for news {news_id}")
+                    response = requests.post(
+                        url=f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",
+                        data={
+                            "chat_id": TELEGRAM_CHANNEL_ID,
+                            "caption": plain_caption,
+                            "photo": image_url}
+                    )
+                    
+                    response = response.json()
 
-        # Convert response into a json object
-        response = response.json()
+            # Final check - if still failing, raise exception
+            if response["ok"] is False:
+                error_msg = f"Error while sending news {news_id!r} - {_id!r}: {response['description']}"
+                LOGGER.error(error_msg)
+                raise Exception(error_msg)
 
-        # If response "ok" status is False, send error to admin
-        if response["ok"] is False:
-            send_error_to_admin(f"Resources({news_id!r}) - {_id!r}\n" + response["description"])
-            break
+            message_id = response["result"]["message_id"]
+            LOGGER.info(f"Successfully sent news {news_id} with Telegram message ID: {message_id}")
 
-        # Else, update the document on MongoDB
-        CONN.update_to_sent(
-            _id=_id,
-            message_id=response["result"]["message_id"]
-        )
+            # Else, update the document on MongoDB
+            CONN.update_to_sent(
+                _id=_id,
+                message_id=message_id
+            )
+
+        if news_count == 0:
+            LOGGER.info("No unsent news found")
+        else:
+            LOGGER.info(f"Successfully processed and sent {news_count} news items")
+            
+    except Exception as e:
+        LOGGER.error(f"Error in send_news function: {str(e)}")
+        raise
 
     return
 
@@ -126,58 +302,109 @@ def parse_resources(data: str):
 
     global known_resources
 
-    # Convert text result into BeautifulSoup4 object
-    page = Soup(data, "html.parser")
-
+    LOGGER.info("Parsing JWST resources data")
+    
     try:
+        # Convert text result into BeautifulSoup4 object
+        page = Soup(data, "html.parser")
+
         # Cycle all divs, with class = "ad-research-box"
+        divs = page.find_all("div", {"class": "ad-research-box"})
+        LOGGER.debug(f"Found {len(divs)} resource divs to process")
+        
+        new_resources_count = 0
+        
         # reversed is used to sort div from less to more recent
-        for div in reversed(page.find_all("div", {"class": "ad-research-box"})):
-            # Get news' title
-            title = div.find("p").text.strip()
+        for div in reversed(divs):
+            try:
+                # Get news' title
+                title_element = div.find("p")
+                if not title_element:
+                    LOGGER.warning("Skipping div: no title element found")
+                    continue
+                title = title_element.text.strip()
 
-            # Get news' description
-            description = div.find("img").get("alt")
+                # Get news' description
+                img_element = div.find("img")
+                if not img_element:
+                    LOGGER.warning(f"Skipping div with title '{title}': no img element found")
+                    continue
+                    
+                description = img_element.get("alt")
+                if not description:
+                    LOGGER.warning(f"No alt text found for image in '{title}', using title as description")
+                    description = title
 
-            # Get image srcset
-            img = div.find("img").get("srcset")
+                # Get image srcset
+                img_srcset = img_element.get("srcset")
+                if not img_srcset:
+                    LOGGER.warning(f"No srcset found for image in '{title}', trying src attribute")
+                    img = img_element.get("src")
+                    if not img:
+                        LOGGER.warning(f"Skipping div with title '{title}': no image source found")
+                        continue
+                else:
+                    # Extract 1 src from the set
+                    img = img_srcset.split(", ")[0]
+                    img = img.split(" ")[0]
+                
+                img = img.replace("//", "https://")
 
-            # Extract 1 src from the set
-            img = img.split(", ")[0]
-            img = img.split(" ")[0]
-            img = img.replace("//", "https://")
+                # If the image host is missing, presume {URL}, the source of the resources
+                if "http" not in img:
+                    img = f"{URL}/{img}"
 
-            # If the image host is missing, presume {URL}, the source of the resources
-            if "http" not in img:
-                img = f"{URL}/{img}"
+                # Get news' link
+                link_element = div.find("a")
+                if not link_element:
+                    LOGGER.warning(f"Skipping div with title '{title}': no link element found")
+                    continue
+                    
+                link = link_element.get("href")
+                if not link:
+                    LOGGER.warning(f"Skipping div with title '{title}': no href attribute found")
+                    continue
+                    
+                link = link.split("?")[0]
 
-            # Get news' link
-            link = div.find("a").get("href")
-            link = link.split("?")[0]
+                # Generate a news id
+                news_id = link.split("/")[-1]
+                if not news_id:
+                    LOGGER.warning(f"Skipping div with title '{title}': could not generate news ID from link")
+                    continue
 
-            # Generate a news id
-            news_id = link.split("/")[-1]
+                # If the news is known, continue
+                if news_id in known_resources:
+                    LOGGER.debug(f"Resource {news_id} already known, skipping")
+                    continue
 
-            # If the news is known, continue
-            if news_id in known_resources:
-                continue
+                LOGGER.info(f"Found new resource: {news_id} - {title[:50]}...")
+                
+                # Else, remember it!
+                known_resources.append(news_id)
 
-            # Else, remember it!
-            known_resources.append(news_id)
+                # Insert the news in the DB
+                CONN.insert_new_resource(
+                    identifier=news_id,
+                    title=title,
+                    description=description,
+                    imageurl=img,
+                    link=link
+                )
+                
+                new_resources_count += 1
+                
+            except Exception as e:
+                LOGGER.error(f"Error processing individual resource div: {str(e)}")
+                continue  # Skip this div and continue with the next one
 
-            # Insert the news in the DB
-            CONN.insert_new_resource(
-                identifier=news_id,
-                title=title,
-                description=description,
-                imageurl=img,
-                link=link
-            )
-
-    except Exception as e:  # If an exception occur, return the error
-        return False, f"parse_resources() something went wrong: {e}"
-
-    return True, ""
+        LOGGER.info(f"Successfully parsed resources data, found {new_resources_count} new resources")
+        return True, ""
+        
+    except Exception as e:
+        error_msg = f"Error parsing resources data: {str(e)}"
+        LOGGER.error(error_msg)
+        return False, error_msg
 
 
 def parse_articles(data: str):
@@ -191,58 +418,111 @@ def parse_articles(data: str):
 
     global known_resources
 
-    # Convert text result into BeautifulSoup4 object
-    page = Soup(data, "html.parser")
-
+    LOGGER.info("Parsing JWST articles data")
+    
     try:
+        # Convert text result into BeautifulSoup4 object
+        page = Soup(data, "html.parser")
+
         # Cycle all divs, with class = "news-listing"
+        divs = page.find_all("div", {"class": "news-listing"})
+        LOGGER.debug(f"Found {len(divs)} article divs to process")
+        
+        new_articles_count = 0
+        
         # reversed is used to sort div from less to more recent
-        for div in reversed(page.find_all("div", {"class": "news-listing"})):
-            # Get article's title
-            title = div.find("h4").text.strip()
+        for div in reversed(divs):
+            try:
+                # Get article's title
+                title_element = div.find("h4")
+                if not title_element:
+                    LOGGER.warning("Skipping article div: no h4 title element found")
+                    continue
+                title = title_element.text.strip()
 
-            # Get article's description
-            description = div.find("p", {"class": "article-description"}).text.strip()
+                # Get article's description
+                description_element = div.find("p", {"class": "article-description"})
+                if not description_element:
+                    LOGGER.warning(f"No description found for article '{title}', using title as description")
+                    description = title
+                else:
+                    description = description_element.text.strip()
 
-            # Get article's image srcset
-            img = div.find("img").get("srcset")
+                # Get article's image srcset
+                img_element = div.find("img")
+                if not img_element:
+                    LOGGER.warning(f"Skipping article with title '{title}': no img element found")
+                    continue
+                    
+                img_srcset = img_element.get("srcset")
+                if not img_srcset:
+                    LOGGER.warning(f"No srcset found for image in article '{title}', trying src attribute")
+                    img = img_element.get("src")
+                    if not img:
+                        LOGGER.warning(f"Skipping article with title '{title}': no image source found")
+                        continue
+                else:
+                    # Extract 1 src from the set
+                    img = img_srcset.split(", ")[0]
+                    img = img.split(" ")[0]
 
-            # Extract 1 src from the set
-            img = img.split(", ")[0]
-            img = img.split(" ")[0]
-            img = img.replace("//", "https://")
+                img = img.replace("//", "https://")
 
-            # If the image host is missing, presume {URL}, the source of the articles
-            if "http" not in img:
-                img = f"{URL}/{img}"
+                # If the image host is missing, presume {URL}, the source of the articles
+                if "http" not in img:
+                    img = f"{URL}/{img}"
 
-            # Get article's link
-            link = div.find("a").get("href")
-            link = link.split("?")[0]
+                # Get article's link
+                link_element = div.find("a")
+                if not link_element:
+                    LOGGER.warning(f"Skipping article with title '{title}': no link element found")
+                    continue
+                    
+                link = link_element.get("href")
+                if not link:
+                    LOGGER.warning(f"Skipping article with title '{title}': no href attribute found")
+                    continue
+                    
+                link = link.split("?")[0]
 
-            # Generate an article ID
-            article_id = link.split("/")[-1]
+                # Generate an article ID
+                article_id = link.split("/")[-1]
+                if not article_id:
+                    LOGGER.warning(f"Skipping article with title '{title}': could not generate article ID from link")
+                    continue
 
-            # If the article is known, continue
-            if article_id in known_resources:
-                continue
+                # If the article is known, continue
+                if article_id in known_resources:
+                    LOGGER.debug(f"Article {article_id} already known, skipping")
+                    continue
 
-            # Else, remember it!
-            known_resources.append(article_id)
+                LOGGER.info(f"Found new article: {article_id} - {title[:50]}...")
 
-            # Insert the news in the DB
-            CONN.insert_new_resource(
-                identifier=article_id,
-                title=title,
-                description=description,
-                imageurl=img,
-                link=link
-            )
+                # Else, remember it!
+                known_resources.append(article_id)
 
-    except Exception as e:  # If an exception occur, return the error
-        return False, f"parse_articles() something went wrong: {e}"
+                # Insert the news in the DB
+                CONN.insert_new_resource(
+                    identifier=article_id,
+                    title=title,
+                    description=description,
+                    imageurl=img,
+                    link=link
+                )
+                
+                new_articles_count += 1
+                
+            except Exception as e:
+                LOGGER.error(f"Error processing individual article div: {str(e)}")
+                continue  # Skip this div and continue with the next one
 
-    return True, ""
+        LOGGER.info(f"Successfully parsed articles data, found {new_articles_count} new articles")
+        return True, ""
+        
+    except Exception as e:
+        error_msg = f"Error parsing articles data: {str(e)}"
+        LOGGER.error(error_msg)
+        return False, error_msg
 
 
 def get_resources():
@@ -253,38 +533,63 @@ def get_resources():
     :rtype: tuple[bool, str]
     """
 
-    # Open a session to make the requests all together
-    with requests.Session() as session:
-        # Update session's user-agent header to make it look more "human"
-        session.headers.update({
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
-        })        
+    LOGGER.info(f"Starting to fetch JWST resources from {RESOURCES_URL}")
+    
+    try:
+        # Open a session to make the requests all together
+        with requests.Session() as session:
+            # Update session's user-agent header to make it look more "human"
+            session.headers.update({
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+            })
+            
+            LOGGER.debug("Created HTTP session with user-agent header")
+            
+            # For every different resource type
+            paths = ["images", "videos", "articles", "other-resources"]
+            LOGGER.info(f"Processing {len(paths)} resource paths: {paths}")
+            
+            for path in paths:
+                url = RESOURCES_URL + path
+                LOGGER.info(f"Fetching data from: {url}")
+                
+                # Make a get request to the URL
+                response = session.get(url=url)
+
+                # If the response status code differ from 200, then something occurred. Return an error
+                if response.status_code != 200:
+                    error_msg = f"get_resources() returned status code = {response.status_code} on path: {path!r}"
+                    LOGGER.error(error_msg)
+                    return False, error_msg
+
+                LOGGER.debug(f"Successfully fetched {len(response.text)} characters from {path}")
+
+                # Parse JWST data
+                # If path = "articles", parse the data using a different function, the webpage structure differ, so a
+                # different method of data extraction must be used
+                if path == "articles":
+                    LOGGER.debug(f"Using article parser for path: {path}")
+                    result, data = parse_articles(data=response.text)
+                else:
+                    LOGGER.debug(f"Using resource parser for path: {path}")
+                    result, data = parse_resources(data=response.text)
+
+                # An error occurred while parsing data?
+                if result is False:
+                    error_msg = data + f" on {response.url}"
+                    LOGGER.error(f"Parsing failed for {path}: {error_msg}")
+                    raise Exception(error_msg)
+                    
+                LOGGER.info(f"Successfully processed path: {path}")
+
+        # Return ok
+        LOGGER.info("Successfully fetched and processed all JWST resources")
+        return True, ""
         
-        # For every different resource type
-        for path in ["images", "videos", "articles", "other-resources"]:
-            # Make a get request to the URL
-            response = session.get(url=RESOURCES_URL + path)
-
-            # If the response status code differ from 200, then something occurred. Return an error
-            if response.status_code != 200:
-                return False, f"get_resources() returned status code = {response.status_code} on path: {path!r}"
-
-            # Parse JWST data
-            # If path = "articles", parse the data using a different function, the webpage structure differ, so a
-            # different method of data extraction must be used
-            if path == "articles":
-                result, data = parse_articles(data=response.text)
-            else:
-                result, data = parse_resources(data=response.text)
-
-            # An error occurred while parsing data?
-            if result is False:
-                send_error_to_admin(data + f" on {response.url}")
-
-                exit()
-
-    # Return ok
-    return True, ""
+    except Exception as e:
+        error_msg = f"Error in get_resources(): {str(e)}"
+        LOGGER.error(error_msg)
+        return False, error_msg
 
 
 def main():
@@ -293,20 +598,50 @@ def main():
     :return: None
     """
 
-    # Init {known_resources} array
-    get_known_resources()
+    global CONN
 
-    # Get JWST news
-    result, data = get_resources()
+    LOGGER.info("=== JWST Gallery Bot Main Process Started ===")
+    
+    try:
+        LOGGER.info("Initializing MongoDB connection...")
+        CONN = Model.MongoDB(
+            uri=MONGODB_URI,
+            certificate=MONGODB_CERTIFICATE,
+            database=MONGODB_DATABASE,
+            collection=MONGODB_COLLECTION
+        )
 
-    # An error occurred while getting data?
-    if result is False:
-        send_error_to_admin(data)
+        LOGGER.info("Loading known resources from database...")
+        # Init {known_resources} array
+        get_known_resources()
 
-        exit()
+        LOGGER.info("Fetching latest JWST resources...")
+        # Get JWST news
+        result, data = get_resources()
 
-    # Send new news
-    send_news()
+        # An error occurred while getting data?
+        if result is False:
+            error_msg = f"Failed to get resources: {data}"
+            LOGGER.error(error_msg)
+            raise Exception(error_msg)
+
+        LOGGER.info("Processing and sending new news...")
+        # Send new news
+        send_news()
+
+        LOGGER.info("=== JWST Gallery Bot Main Process Completed Successfully ===")
+        
+    except Exception as e:
+        LOGGER.error(f"Critical error in main process: {str(e)}")
+        raise
+    finally:
+        # Ensure database connection is closed
+        if CONN is not None:
+            try:
+                CONN.close()
+                LOGGER.info("MongoDB connection closed")
+            except Exception as e:
+                LOGGER.warning(f"Error closing MongoDB connection: {str(e)}")
 
     return
 
@@ -329,13 +664,33 @@ def lambda_handler(event, lambda_context):
     global AWS_REQUEST_ID    
     AWS_REQUEST_ID = lambda_context.aws_request_id
 
+    # Initialize logger first
+    init_logger()
+    LOGGER.info(f"=== AWS Lambda Function Started ===")
+    LOGGER.info(f"AWS Request ID: {AWS_REQUEST_ID}")
+    LOGGER.info(f"Function Name: {lambda_context.function_name}")
+    LOGGER.info(f"Function Version: {lambda_context.function_version}")
+    LOGGER.info(f"Memory Limit: {lambda_context.memory_limit_in_mb}MB")
+    LOGGER.info(f"Remaining Time: {lambda_context.get_remaining_time_in_millis()}ms")
+
     try:
         main()
-    except:
-        traceback.print_exc()
+        LOGGER.info("=== AWS Lambda Function Completed Successfully ===")
+    except Exception as e:
+        LOGGER.error(f"=== AWS Lambda Function Failed with Error: {str(e)} ===")
+        raise
 
     return
 
 
 if __name__ == "__main__":
-    main()
+    # Initialize logger for local execution
+    init_logger()
+    LOGGER.info("=== Local Execution Started ===")
+    
+    try:
+        main()
+        LOGGER.info("=== Local Execution Completed Successfully ===")
+    except Exception as e:
+        LOGGER.error(f"=== Local Execution Failed with Error: {str(e)} ===")
+        raise
