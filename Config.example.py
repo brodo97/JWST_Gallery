@@ -17,3 +17,7 @@ MONGODB_CERTIFICATE = ""
 MONGODB_DATABASE = ""
 # Database's Collection Name
 MONGODB_COLLECTION = ""
+
+# App configuration
+APP_NAME = "JWST Galley"
+LOG_LEVEL = "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
